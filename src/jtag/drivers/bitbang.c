@@ -389,10 +389,31 @@ static int bitbang_swd_init(void)
 	return ERROR_OK;
 }
 
+//  #define LOG_BITBANG  //  Log bit bang requests
+
+#if BUILD_BCM2835SPI == 1
+void spi_exchange(bool rnw, uint8_t buf[], unsigned int offset, unsigned int bit_cnt);
+#endif  //  BUILD_BCM2835SPI == 1
+
 static void bitbang_swd_exchange(bool rnw, uint8_t buf[], unsigned int offset, unsigned int bit_cnt)
 {
+#ifdef LOG_BITBANG
+	{
+		if (!rnw && buf) {  //  If transmitting SWD command to target...
+			LOG_DEBUG("** %s offset %d bits %2d:", rnw ? "trgt -> host" : "host -> trgt", offset, bit_cnt);
+			for (unsigned int i = 0; i < (bit_cnt + 7) / 8; i++) {
+				LOG_DEBUG(" %02x", buf[i]);
+			}
+			LOG_DEBUG("\n");
+		}
+	}
+#else  //  LOG_BITBANG
 	LOG_DEBUG("bitbang_swd_exchange");
+#endif  //  LOG_BITBANG
 
+#if BUILD_BCM2835SPI == 1  //  Transmit and receive SWD commands over SPI...
+	spi_exchange(rnw, buf, offset, bit_cnt);
+#else  //  Transmit and receive SWD commands over GPIO...
 	if (bitbang_interface->blink) {
 		/* FIXME: we should manage errors */
 		bitbang_interface->blink(1);
@@ -419,6 +440,19 @@ static void bitbang_swd_exchange(bool rnw, uint8_t buf[], unsigned int offset, u
 		/* FIXME: we should manage errors */
 		bitbang_interface->blink(0);
 	}
+#endif  //  BUILD_BCM2835SPI == 1
+
+#ifdef LOG_BITBANG
+	{
+		if (rnw && buf) {  //  If receiving SWD response from target...
+			LOG_DEBUG("** %s offset %d bits %2d:", rnw ? "trgt -> host" : "host -> trgt", offset, bit_cnt);
+			for (unsigned int i = 0; i < (bit_cnt + 7) / 8; i++) {
+				LOG_DEBUG(" %02x", buf[i]);
+			}
+			LOG_DEBUG("\n");
+		}
+	}
+#endif  //  LOG_BITBANG
 }
 
 static int bitbang_swd_switch_seq(enum swd_special_seq seq)
